@@ -68,7 +68,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	thumbnailURL := "/assets/" + videoID.String() + "." + mediaType[len("image/"):]
+	thumbnailURL := "http://localhost:" + cfg.port + "/assets/" + videoID.String() + "." + mediaType[len("image/"):]
 	thumbnail, err := os.Create(cfg.assetsRoot + "/" + videoID.String() + "." + mediaType[len("image/"):])
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't create thumbnail file", err)
