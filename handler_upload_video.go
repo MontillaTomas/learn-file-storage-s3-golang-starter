@@ -57,6 +57,15 @@ func getVideoAspectRatio(filePath string) (string, error) {
 	return "other", nil
 }
 
+func processVideoForFastStart(filePath string) (string, error) {
+	outputPath := filePath + ".processing"
+	cmd := exec.Command("ffmpeg", "-i", filePath, "-c", "copy", "-movflags", "faststart", "-f", "mp4", outputPath)
+	if err := cmd.Run(); err != nil {
+		return "", err
+	}
+	return outputPath, nil
+}
+
 func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request) {
 	videoIDString := r.PathValue("videoID")
 	videoID, err := uuid.Parse(videoIDString)
@@ -132,11 +141,19 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	_, err = tempFile.Seek(0, io.SeekStart)
+	processedPath, err := processVideoForFastStart(tempFile.Name())
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't reset temp file pointer", err)
+		respondWithError(w, http.StatusInternalServerError, "Couldn't process video for fast start", err)
 		return
 	}
+	defer os.Remove(processedPath)
+
+	processedFile, err := os.Open(processedPath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't open processed video", err)
+		return
+	}
+	defer processedFile.Close()
 
 	key := make([]byte, 32)
 	rand.Read(key)
@@ -151,7 +168,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	_, err = cfg.s3Client.PutObject(context.Background(), &s3.PutObjectInput{
 		Bucket:      aws.String(cfg.s3Bucket),
 		Key:         aws.String(fileKey),
-		Body:        tempFile,
+		Body:        processedFile,
 		ContentType: aws.String(mediaType),
 	})
 	if err != nil {
